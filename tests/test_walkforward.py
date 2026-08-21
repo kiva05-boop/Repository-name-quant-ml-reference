@@ -66,7 +66,7 @@ class TestWalkForwardValidator:
         validator = WalkForwardValidator(n_splits=3)
         with pytest.raises(TypeError):
             list(validator.split(X))
- 
+
     def test_embargo_creates_gap_between_train_and_test(self) -> None:
         """Embargo must create a real calendar-time gap before testing."""
         idx = pd.bdate_range("2015-01-01", "2022-12-31")
