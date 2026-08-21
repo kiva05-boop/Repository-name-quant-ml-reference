@@ -101,8 +101,8 @@ class WalkForwardValidator:
 
         for fold_id in range(self.n_splits):
             # Train ends at the moving cutoff
-            train_end = test_span_start + pd.Timedelta(days=fold_id * step_days)
-            test_start = train_end + pd.Timedelta(days=self.embargo_days)
+            train_end = test_span_start + pd.Timedelta(fold_id * step_days, unit="D")
+            test_start = train_end + pd.Timedelta(value=self.embargo_days, unit="D")
             test_end = test_start + pd.DateOffset(months=self.test_months)
 
             # Clip test_end to available data

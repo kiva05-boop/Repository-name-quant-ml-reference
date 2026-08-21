@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 import numpy as np
 import pandas as pd
 
-ROOT = Path("/home/claude/quant-ml-research")
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from quant_ml.backtest import BacktestEngine, CostModel

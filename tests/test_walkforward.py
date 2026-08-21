@@ -66,3 +66,102 @@ class TestWalkForwardValidator:
         validator = WalkForwardValidator(n_splits=3)
         with pytest.raises(TypeError):
             list(validator.split(X))
+ 
+    def test_embargo_creates_gap_between_train_and_test(self) -> None:
+        """Embargo must create a real calendar-time gap before testing."""
+        idx = pd.bdate_range("2015-01-01", "2022-12-31")
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(
+            rng.normal(0, 1, (len(idx), 3)),
+            index=idx,
+            columns=["a", "b", "c"],
+        )
+
+        embargo_days = 10
+
+        validator = WalkForwardValidator(
+            n_splits=4,
+            train_months=24,
+            test_months=6,
+            embargo_days=embargo_days,
+        )
+
+        for fold in validator.split(X):
+            assert fold.test_start - fold.train_end >= pd.Timedelta(value=embargo_days, unit='D')
+
+
+    def test_test_folds_do_not_overlap(self) -> None:
+        """Each OOS observation should belong to at most one test fold."""
+        idx = pd.bdate_range("2015-01-01", "2022-12-31")
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(
+            rng.normal(0, 1, (len(idx), 3)),
+            index=idx,
+            columns=["a", "b", "c"],
+        )
+
+        validator = WalkForwardValidator(
+            n_splits=4,
+            train_months=24,
+            test_months=6,
+        )
+
+        folds = list(validator.split(X))
+
+        for i in range(len(folds) - 1):
+            assert folds[i].test_end < folds[i + 1].test_start
+
+
+    def test_training_is_strictly_before_test(self) -> None:
+        """No training observation may occur at or after a test observation."""
+        idx = pd.bdate_range("2015-01-01", "2022-12-31")
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(
+            rng.normal(0, 1, (len(idx), 3)),
+            index=idx,
+            columns=["a", "b", "c"],
+        )
+
+        validator = WalkForwardValidator(
+            n_splits=4,
+            train_months=24,
+            test_months=6,
+        )
+
+        for fold in validator.split(X):
+            train_dates = X.index[fold.train_idx]
+            test_dates = X.index[fold.test_idx]
+
+            assert train_dates.max() < test_dates.min()
+
+
+    def test_oos_predictions_are_unique(self) -> None:
+        """Walk-forward predictions must not contain duplicate timestamps."""
+        idx = pd.bdate_range("2015-01-01", "2022-12-31")
+        rng = np.random.default_rng(0)
+
+        X = pd.DataFrame(
+            rng.normal(0, 1, (len(idx), 3)),
+            index=idx,
+            columns=["a", "b", "c"],
+        )
+
+        y = pd.Series(
+            (X["a"] > 0).astype(int),
+            index=idx,
+        )
+
+        validator = WalkForwardValidator(
+            n_splits=4,
+            train_months=24,
+            test_months=6,
+        )
+
+        result = validator.evaluate(
+            LogisticRegression(max_iter=1000),
+            X,
+            y,
+        )
+
+        assert result.predictions.index.is_unique
+        assert result.probabilities.index.is_unique

@@ -40,34 +40,46 @@ def build_dataset(
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Build (X, y) for ML training.
 
-    Parameters
-    ----------
-    prices : pd.DataFrame
-        OHLCV data.
-    horizon : int
-        Forecast horizon in bars. y_t = 1 if return from t to t+horizon > 0.
-    close_col : str
-        Price column to use for return calculation.
-
-    Returns
-    -------
-    X : pd.DataFrame
-        Feature matrix, NaN rows dropped.
-    y : pd.Series
-        Binary target aligned with X.
+    Rows without a known future price are excluded rather than being
+    incorrectly treated as class 0.
     """
-    features = build_feature_matrix(prices, close_col=close_col)
-    forward_return = prices[close_col].shift(-horizon) / prices[close_col] - 1
-    target = (forward_return > 0).astype(int)
-    target.name = "target"
+    if horizon < 1:
+        raise ValueError("horizon must be >= 1")
 
-    df = features.join(target).dropna()
-    # Drop the last `horizon` rows where target is NaN (no future to look at)
+    if close_col not in prices.columns:
+        raise KeyError(f"Missing close column: {close_col}")
+
+    features = build_feature_matrix(
+        prices,
+        close_col=close_col,
+    )
+
+    forward_return = (
+        prices[close_col].shift(-horizon)
+        / prices[close_col]
+        - 1
+    )
+
+    # Preserve NaN where the future price does not exist.
+    target = pd.Series(
+        np.nan,
+        index=prices.index,
+        dtype=float,
+        name="target",
+    )
+
+    valid_future = forward_return.notna()
+
+    target.loc[valid_future] = (
+        forward_return.loc[valid_future] > 0
+    ).astype(int)
+
+    df = features.join(target)
+
+    # Remove incomplete features and rows without future labels.
+    df = df.replace([np.inf, -np.inf], np.nan).dropna()
+
     X = df.drop(columns=["target"])
     y = df["target"].astype(int)
-
-    # Replace any inf from divisions with NaN, then drop
-    X = X.replace([np.inf, -np.inf], np.nan).dropna()
-    y = y.loc[X.index]
 
     return X, y
